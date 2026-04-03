@@ -1,0 +1,780 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import { getTemplate } from "@/lib/data";
+import { renderTemplate } from "@/lib/renderTemplate";
+import { saveCustomTemplate, saveEmail, type SavedEmail } from "@/lib/storage";
+import { downloadHtmlFile } from "@/lib/exportHtml";
+
+const REUSE_EMAIL_KEY = "arcmail_reuse_email";
+
+const fieldLabels: Record<string, string> = {
+  name: "Who are you emailing?",
+  company: "What company are they at?",
+  yourName: "What is your name?",
+  service: "What service do you offer?",
+  result: "What result do you help clients get?",
+  idea: "What quick idea do you want to share?",
+  value: "What useful value or insight do you want to mention?",
+  difference: "What makes your offer different?",
+  summary: "What short overview do you want to send?",
+  problemArea: "What problem area are you helping with?",
+  product: "What product or offer are you referring to?",
+  points: "What were the key points from the meeting?",
+  nextSteps: "What are the next steps?",
+  offer: "What are you offering or walking them through?",
+};
+
+const fieldPlaceholders: Record<string, string> = {
+  name: "Example: Sarah",
+  company: "Example: Bright Growth",
+  yourName: "Example: Amina",
+  service: "Example: outbound lead generation for agencies",
+  result: "Example: more qualified booked calls",
+  idea: "Share one specific idea that feels useful to them",
+  value: "Mention one relevant insight, observation, or useful angle",
+  difference: "Example: faster turnaround, niche expertise, stronger positioning",
+  summary: "Write a short, skimmable overview",
+  problemArea: "Example: low reply rates, weak follow-up process",
+  product: "Example: our lead generation offer",
+  points: "Write the main discussion points clearly",
+  nextSteps: "Write the agreed actions clearly",
+  offer: "Example: our client acquisition system",
+};
+
+const fieldHints: Record<string, string> = {
+  name: "Use their real first name if you have it.",
+  company: "Mention the actual company, not a generic industry label.",
+  service: "Keep this tied to an outcome, not just a list of tasks.",
+  result: "Focus on the business result they care about most.",
+  idea: "Make this specific to them. A useful observation works better than a pitch.",
+  value: "This should feel genuinely helpful, not like disguised selling.",
+  difference: "Choose one clear differentiator instead of listing everything.",
+  summary: "Keep it concise and easy to skim.",
+  problemArea: "Name a problem they would likely already recognize.",
+  product: "Use plain language they would understand immediately.",
+  points: "Only include the points that matter for moving things forward.",
+  nextSteps: "Be clear about what happens next and who does what.",
+  offer: "Describe the offer in the simplest possible way.",
+  yourName: "Use the name you want prospects to see in the signoff.",
+};
+
+function getLabel(variable: string) {
+  return fieldLabels[variable] || variable;
+}
+
+function getPlaceholder(variable: string) {
+  return fieldPlaceholders[variable] || `Enter ${variable}`;
+}
+
+function getHint(variable: string) {
+  return fieldHints[variable] || "";
+}
+
+function shouldUseTextarea(variable: string) {
+  return ["idea", "value", "summary", "points", "nextSteps"].includes(variable);
+}
+
+function Field({
+  variable,
+  values,
+  handleChange,
+}: {
+  variable: string;
+  values: Record<string, string>;
+  handleChange: (key: string, value: string) => void;
+}) {
+  return (
+    <div className="formGroup" style={{ marginBottom: 16 }}>
+      <label htmlFor={variable} className="label">
+        {getLabel(variable)}
+      </label>
+
+      {shouldUseTextarea(variable) ? (
+        <textarea
+          id={variable}
+          className="input"
+          rows={4}
+          value={values[variable] || ""}
+          onChange={(e) => handleChange(variable, e.target.value)}
+          placeholder={getPlaceholder(variable)}
+        />
+      ) : (
+        <input
+          id={variable}
+          className="input"
+          value={values[variable] || ""}
+          onChange={(e) => handleChange(variable, e.target.value)}
+          placeholder={getPlaceholder(variable)}
+        />
+      )}
+
+      {getHint(variable) ? (
+        <p className="muted" style={{ marginTop: 6, fontSize: 13 }}>
+          {getHint(variable)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+export default function EditorPage() {
+  const params = useParams();
+  const router = useRouter();
+
+  const rawPlaybookId = useMemo(() => {
+    const value = params?.playbookId;
+    return Array.isArray(value) ? value[0] : value;
+  }, [params]);
+
+  const rawTemplateId = useMemo(() => {
+    const value = params?.templateId;
+    return Array.isArray(value) ? value[0] : value;
+  }, [params]);
+
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [companyName, setCompanyName] = useState("");
+  const [logoData, setLogoData] = useState<string>("");
+  const [savedMessage, setSavedMessage] = useState("");
+  const [offerType, setOfferType] = useState("");
+  const [targetAudience, setTargetAudience] = useState("");
+  const [primaryGoal, setPrimaryGoal] = useState("");
+  const [reuseMode, setReuseMode] = useState(false);
+  const [editableSubject, setEditableSubject] = useState("");
+  const [editableBody, setEditableBody] = useState("");
+  const [showOptionalInputs, setShowOptionalInputs] = useState(false);
+  const [showBranding, setShowBranding] = useState(false);
+  const [showPersonalGuide, setShowPersonalGuide] = useState(false);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+
+  if (!rawPlaybookId || !rawTemplateId) {
+    return (
+      <main className="main">
+        <section className="container">
+          <div className="glassCard emptyState">
+            <h1 className="pageTitle">Template not found</h1>
+            <p className="muted">This playbook step could not be loaded.</p>
+            <div className="toolbar" style={{ justifyContent: "center" }}>
+              <button className="button buttonPrimary" onClick={() => router.push("/")}>
+                Go Home
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const playbookId = rawPlaybookId;
+  const templateId = rawTemplateId;
+  const foundTemplate = getTemplate(playbookId, templateId);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const raw = localStorage.getItem(REUSE_EMAIL_KEY);
+    if (!raw) return;
+
+    try {
+      const savedEmail = JSON.parse(raw) as SavedEmail;
+
+      if (
+        savedEmail.playbookId === playbookId &&
+        savedEmail.templateId === templateId
+      ) {
+        setReuseMode(true);
+        setEditableSubject(savedEmail.subject);
+        setEditableBody(savedEmail.body);
+        localStorage.removeItem(REUSE_EMAIL_KEY);
+      }
+    } catch {
+      localStorage.removeItem(REUSE_EMAIL_KEY);
+    }
+  }, [playbookId, templateId]);
+
+  if (!foundTemplate) {
+    return (
+      <main className="main">
+        <section className="container">
+          <div className="glassCard emptyState">
+            <h1 className="pageTitle">Template not found</h1>
+            <p className="muted">This playbook step could not be loaded.</p>
+            <div className="toolbar" style={{ justifyContent: "center" }}>
+              <button className="button buttonPrimary" onClick={() => router.push("/")}>
+                Go Home
+              </button>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  const template = foundTemplate;
+
+  const mergedValues = {
+    ...values,
+    service: values.service || offerType,
+    offer: values.offer || offerType,
+    company: values.company || targetAudience,
+    result: values.result || primaryGoal,
+    product: values.product || offerType,
+  };
+
+  const generatedSubject = renderTemplate(template.subject, mergedValues);
+  const generatedBody = renderTemplate(template.body, mergedValues);
+
+  const finalSubject = reuseMode ? editableSubject : generatedSubject;
+  const finalBody = reuseMode ? editableBody : generatedBody;
+
+  const coreVariables = template.variables.slice(0, 3);
+  const optionalVariables = template.variables.slice(3);
+
+  function handleChange(key: string, value: string) {
+    setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(`Subject: ${finalSubject}\n\n${finalBody}`);
+      alert("Email copied");
+    } catch {
+      alert("Copy failed");
+    }
+  }
+
+  function handleDownloadText() {
+    const content = `Subject: ${finalSubject}\n\n${finalBody}`;
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `${template.id}.txt`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+
+    URL.revokeObjectURL(url);
+  }
+
+  function handleDownloadHtml() {
+    downloadHtmlFile(finalSubject, finalBody, template.id, {
+      companyName,
+      logoUrl: logoData,
+    });
+  }
+
+  function makeId() {
+    return typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
+  function handleSaveEmail() {
+    saveEmail({
+      id: makeId(),
+      playbookId,
+      templateId,
+      templateLabel: template.label,
+      subject: finalSubject,
+      body: finalBody,
+      createdAt: new Date().toISOString(),
+    });
+
+    setSavedMessage("Saved to Saved Emails");
+    setTimeout(() => setSavedMessage(""), 2200);
+  }
+
+  function handleSaveSequenceVersion() {
+    saveCustomTemplate({
+      id: makeId(),
+      title: template.label,
+      subject: finalSubject,
+      body: finalBody,
+      sourcePlaybookId: playbookId,
+      sourceTemplateId: templateId,
+      createdAt: new Date().toISOString(),
+    });
+
+    setSavedMessage("Saved to Reusable Sequences");
+    setTimeout(() => setSavedMessage(""), 2200);
+  }
+
+  return (
+    <main className="main">
+      <section className="container">
+        <div className="pageHeader">
+          <div className="badge">Playbook Step Editor</div>
+          <h1 className="pageTitle" style={{ marginTop: 14 }}>
+            {template.label}
+          </h1>
+          <p className="muted" style={{ maxWidth: 760 }}>
+            Start with the essentials, then refine only if you need to.
+          </p>
+        </div>
+
+        <div
+          className="glassCard"
+          style={{
+            padding: 16,
+            marginBottom: 18,
+            borderColor: "rgba(201, 166, 72, 0.14)",
+            background:
+              "linear-gradient(180deg, rgba(201,166,72,0.08), rgba(255,255,255,0.02))",
+          }}
+        >
+          <p className="muted" style={{ margin: 0, lineHeight: 1.65 }}>
+            You’re using early access. Paid plans will unlock more advanced playbooks
+            and features later.
+          </p>
+        </div>
+
+        <div
+          className="editorLayout"
+          style={{
+            alignItems: "start",
+            gridTemplateColumns: "minmax(0, 1fr) minmax(360px, 0.92fr)",
+          }}
+        >
+          <div className="formCard">
+            <div
+              className="glassCard"
+              style={{
+                padding: 18,
+                marginBottom: 18,
+                background: "rgba(255,255,255,0.03)",
+              }}
+            >
+              <h4 style={{ margin: 0 }}>Quick onboarding</h4>
+              <p className="muted" style={{ margin: "8px 0 0" }}>
+                Add the basics first so the draft feels relevant immediately.
+              </p>
+            </div>
+
+            <div
+              style={{
+                display: "grid",
+                gap: 14,
+                gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+                marginBottom: 18,
+              }}
+            >
+              <div className="formGroup" style={{ marginBottom: 0 }}>
+                <label className="label">What do you sell?</label>
+                <input
+                  className="input"
+                  value={offerType}
+                  onChange={(e) => setOfferType(e.target.value)}
+                  placeholder="Example: lead generation for agencies"
+                />
+              </div>
+
+              <div className="formGroup" style={{ marginBottom: 0 }}>
+                <label className="label">Who are you targeting?</label>
+                <input
+                  className="input"
+                  value={targetAudience}
+                  onChange={(e) => setTargetAudience(e.target.value)}
+                  placeholder="Example: agency founders"
+                />
+              </div>
+
+              <div className="formGroup" style={{ marginBottom: 0 }}>
+                <label className="label">What result are you trying to get?</label>
+                <input
+                  className="input"
+                  value={primaryGoal}
+                  onChange={(e) => setPrimaryGoal(e.target.value)}
+                  placeholder="Example: more replies"
+                />
+              </div>
+            </div>
+
+            <div
+              className="glassCard"
+              style={{
+                padding: 18,
+                marginBottom: 18,
+                background: "rgba(255,255,255,0.026)",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  gap: 12,
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0 }}>Build your email</h4>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    Start with the essentials — you do not need to fill everything.
+                  </p>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gap: 14, marginTop: 18 }}>
+                {coreVariables.map((variable) => (
+                  <Field
+                    key={variable}
+                    variable={variable}
+                    values={values}
+                    handleChange={handleChange}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {optionalVariables.length > 0 ? (
+              <div className="glassCard" style={{ padding: 18, marginBottom: 18 }}>
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <h4 style={{ margin: 0 }}>Optional details</h4>
+                    <p className="muted" style={{ margin: "6px 0 0" }}>
+                      Add more context if you want a more tailored result.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="button buttonSecondary"
+                    onClick={() => setShowOptionalInputs((prev) => !prev)}
+                  >
+                    {showOptionalInputs ? "Hide optional details" : "Show optional details"}
+                  </button>
+                </div>
+
+                {showOptionalInputs ? (
+                  <div style={{ display: "grid", gap: 14, marginTop: 18 }}>
+                    {optionalVariables.map((variable) => (
+                      <Field
+                        key={variable}
+                        variable={variable}
+                        values={values}
+                        handleChange={handleChange}
+                      />
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="glassCard" style={{ padding: 18, marginBottom: 18 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0 }}>Make this feel personal</h4>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    Small details often make the biggest difference.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="button buttonSecondary"
+                  onClick={() => setShowPersonalGuide((prev) => !prev)}
+                >
+                  {showPersonalGuide ? "Hide tips" : "Show tips"}
+                </button>
+              </div>
+
+              {showPersonalGuide ? (
+                <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Mention something specific about the person or company whenever you can.
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    A useful observation beats a generic compliment.
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Avoid empty lines like “hope you’re well” unless the rest is genuinely relevant.
+                  </p>
+                  <p className="muted" style={{ margin: 0 }}>
+                    Keep it natural — personal does not mean long.
+                  </p>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="glassCard" style={{ padding: 18, marginBottom: 18 }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: 12,
+                  flexWrap: "wrap",
+                }}
+              >
+                <div>
+                  <h4 style={{ margin: 0 }}>Branding for HTML export</h4>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    Optional if you want a branded export.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  className="button buttonSecondary"
+                  onClick={() => setShowBranding((prev) => !prev)}
+                >
+                  {showBranding ? "Hide branding" : "Show branding"}
+                </button>
+              </div>
+
+              {showBranding ? (
+                <div style={{ marginTop: 18 }}>
+                  <div className="formGroup">
+                    <label htmlFor="companyName" className="label">
+                      Brand / Company Name
+                    </label>
+                    <input
+                      id="companyName"
+                      className="input"
+                      value={companyName}
+                      onChange={(e) => setCompanyName(e.target.value)}
+                      placeholder="Enter your brand or company name"
+                    />
+                  </div>
+
+                  <div className="formGroup" style={{ marginBottom: 0 }}>
+                    <label htmlFor="logoUpload" className="label">
+                      Upload Logo
+                    </label>
+                    <input
+                      id="logoUpload"
+                      type="file"
+                      accept="image/*"
+                      className="input"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setLogoData(reader.result as string);
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+
+                    {logoData ? (
+                      <div style={{ marginTop: 12 }}>
+                        <img
+                          src={logoData}
+                          alt="Logo preview"
+                          style={{
+                            maxHeight: 56,
+                            maxWidth: 180,
+                            display: "block",
+                            borderRadius: 8,
+                          }}
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="glassCard" style={{ padding: 18, marginBottom: 18 }}>
+              <h4 style={{ margin: 0 }}>Save options</h4>
+
+              <div
+                style={{
+                  display: "grid",
+                  gap: 14,
+                  marginTop: 14,
+                }}
+              >
+                <div
+                  style={{
+                    paddingBottom: 12,
+                    borderBottom: "1px solid rgba(255,255,255,0.06)",
+                  }}
+                >
+                  <strong>Save Email</strong>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    Save this email so you can reuse it later from your Saved Emails page.
+                  </p>
+                </div>
+
+                <div>
+                  <strong>Save Sequence Version</strong>
+                  <p className="muted" style={{ margin: "6px 0 0" }}>
+                    Save this as a reusable version inside your Reusable Sequences library.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {reuseMode ? (
+              <div className="glassCard" style={{ padding: 18, marginBottom: 18 }}>
+                <h4 style={{ margin: 0 }}>Reuse this email</h4>
+                <p className="muted" style={{ margin: "8px 0 0" }}>
+                  You opened a saved email to use again. You can edit it directly below.
+                </p>
+
+                <div className="formGroup" style={{ marginTop: 14 }}>
+                  <label className="label">Subject</label>
+                  <input
+                    className="input"
+                    value={editableSubject}
+                    onChange={(e) => setEditableSubject(e.target.value)}
+                    placeholder="Edit subject"
+                  />
+                </div>
+
+                <div className="formGroup" style={{ marginBottom: 0 }}>
+                  <label className="label">Body</label>
+                  <textarea
+                    className="input"
+                    rows={10}
+                    value={editableBody}
+                    onChange={(e) => setEditableBody(e.target.value)}
+                    placeholder="Edit email body"
+                  />
+                </div>
+
+                <div className="toolbar" style={{ marginTop: 14 }}>
+                  <button
+                    className="button buttonSecondary"
+                    onClick={() => {
+                      setReuseMode(false);
+                      setEditableSubject("");
+                      setEditableBody("");
+                    }}
+                  >
+                    Switch back to generated version
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="toolbar" style={{ marginBottom: 18 }}>
+                <button
+                  className="button buttonSecondary"
+                  onClick={() => {
+                    setReuseMode(true);
+                    setEditableSubject(generatedSubject);
+                    setEditableBody(generatedBody);
+                  }}
+                >
+                  Edit generated email directly
+                </button>
+              </div>
+            )}
+
+            <div
+              className="glassCard"
+              style={{
+                padding: 18,
+                marginTop: 8,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: 10,
+                  alignItems: "center",
+                }}
+              >
+                <button className="button buttonPrimary" onClick={handleCopy}>
+                  Copy Email
+                </button>
+
+                <button className="button buttonSecondary" onClick={handleSaveEmail}>
+                  Save Email
+                </button>
+
+                <button
+                  className="button buttonSecondary"
+                  onClick={() => setShowMoreActions((prev) => !prev)}
+                >
+                  {showMoreActions ? "Hide options" : "More"}
+                </button>
+              </div>
+
+              {showMoreActions ? (
+                <div
+                  style={{
+                    marginTop: 14,
+                    display: "flex",
+                    flexWrap: "wrap",
+                    gap: 10,
+                  }}
+                >
+                  <button className="button buttonSecondary" onClick={handleDownloadText}>
+                    Download TXT
+                  </button>
+
+                  <button className="button buttonSecondary" onClick={handleDownloadHtml}>
+                    Export HTML
+                  </button>
+
+                  <button
+                    className="button buttonSecondary"
+                    onClick={handleSaveSequenceVersion}
+                  >
+                    Save Sequence Version
+                  </button>
+                </div>
+              ) : null}
+            </div>
+
+            {savedMessage ? <p className="notice">{savedMessage}</p> : null}
+
+            <div className="toolbar" style={{ marginTop: 14, rowGap: 12, columnGap: 12 }}>
+              <button
+                className="button buttonSecondary"
+                onClick={() => router.push("/history")}
+              >
+                Go to Saved Emails
+              </button>
+              <button
+                className="button buttonSecondary"
+                onClick={() => router.push("/custom-templates")}
+              >
+                Go to Reusable Sequences
+              </button>
+            </div>
+          </div>
+
+          <div style={{ position: "sticky", top: 98, alignSelf: "start" }}>
+            <div className="previewCard">
+              <div className="previewLabel">Live Preview</div>
+
+              <div className="previewBox">
+                <strong>Subject: {finalSubject}</strong>
+              </div>
+
+              <div className="previewSpacer" />
+
+              <div className="previewLabel">Email Preview</div>
+              <div className="previewBox">{finalBody}</div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
