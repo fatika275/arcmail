@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSavedEmails, saveEmail, type SavedEmail } from "@/lib/storage";
+import { getEmails, saveEmail, type SavedEmail } from "@/lib/storage";
 import { downloadHtmlFile } from "@/lib/exportHtml";
 
 export default function DuplicateEmailPage() {
@@ -18,13 +18,13 @@ export default function DuplicateEmailPage() {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [logoUrl, setLogoUrl] = useState("");
+  const [logoData, setLogoData] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
 
   useEffect(() => {
     if (!id) return;
 
-    const emails = getSavedEmails();
+    const emails = getEmails();
     const found = emails.find((item) => item.id === id) ?? null;
 
     if (found) {
@@ -34,10 +34,16 @@ export default function DuplicateEmailPage() {
     }
   }, [id]);
 
+  function makeId() {
+    return typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   async function handleCopy() {
     try {
       await navigator.clipboard.writeText(`Subject: ${subject}\n\n${body}`);
-      alert("Email copied");
+      alert("Copied!");
     } catch {
       alert("Copy failed");
     }
@@ -61,23 +67,18 @@ export default function DuplicateEmailPage() {
   function handleDownloadHtml() {
     downloadHtmlFile(subject, body, "duplicated-email", {
       companyName,
-      logoUrl,
+      logoUrl: logoData,
     });
   }
 
-  function handleSaveAsNew() {
+  function handleSaveEmail() {
     if (!email) return;
 
-    const newId =
-      typeof crypto !== "undefined" && "randomUUID" in crypto
-        ? crypto.randomUUID()
-        : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-
     saveEmail({
-      id: newId,
+      id: makeId(),
       playbookId: email.playbookId,
       templateId: email.templateId,
-      templateLabel: `${email.templateLabel} Copy`,
+      templateLabel: email.templateLabel,
       subject,
       body,
       createdAt: new Date().toISOString(),
@@ -93,7 +94,15 @@ export default function DuplicateEmailPage() {
         <section className="container">
           <div className="glassCard emptyState">
             <h1 className="pageTitle">Email not found</h1>
-            <p className="muted">Could not load this saved email.</p>
+            <p className="muted">This email could not be duplicated.</p>
+            <div className="toolbar" style={{ justifyContent: "center" }}>
+              <button
+                className="button buttonPrimary"
+                onClick={() => router.push("/history")}
+              >
+                Back to Saved Emails
+              </button>
+            </div>
           </div>
         </section>
       </main>
@@ -104,25 +113,20 @@ export default function DuplicateEmailPage() {
     <main className="main">
       <section className="container">
         <div className="pageHeader">
-          <div className="badge">Duplicate & Edit</div>
+          <div className="badge">Duplicate Email</div>
           <h1 className="pageTitle" style={{ marginTop: 14 }}>
-            Edit Your Saved Email
+            Duplicate and edit
           </h1>
           <p className="muted">
-            Make changes, then save this as a new version.
+            Make a new version of this saved email without changing the original.
           </p>
         </div>
 
         <div className="editorLayout">
           <div className="formCard">
-            <h3 className="cardTitle">Edit Email</h3>
-
             <div className="formGroup">
-              <label className="label" htmlFor="subject">
-                Subject
-              </label>
+              <label className="label">Subject</label>
               <input
-                id="subject"
                 className="input"
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
@@ -131,84 +135,101 @@ export default function DuplicateEmailPage() {
             </div>
 
             <div className="formGroup">
-              <label className="label" htmlFor="body">
-                Body
-              </label>
+              <label className="label">Body</label>
               <textarea
-                id="body"
                 className="input"
+                rows={14}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 placeholder="Enter email body"
-                rows={16}
               />
             </div>
 
             <div className="formGroup">
-              <label htmlFor="companyName" className="label">
-                Brand / Company Name
-              </label>
+              <label className="label">Company Name</label>
               <input
-                id="companyName"
                 className="input"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                placeholder="Enter company name for HTML export"
+                placeholder="Enter company name for export"
               />
             </div>
 
             <div className="formGroup">
-              <label htmlFor="logoUrl" className="label">
-                Logo URL
-              </label>
+              <label className="label">Upload Logo</label>
               <input
-                id="logoUrl"
+                type="file"
+                accept="image/*"
                 className="input"
-                value={logoUrl}
-                onChange={(e) => setLogoUrl(e.target.value)}
-                placeholder="Paste logo image URL (optional)"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+
+                  const reader = new FileReader();
+                  reader.onload = () => {
+                    setLogoData(reader.result as string);
+                  };
+                  reader.readAsDataURL(file);
+                }}
               />
+
+              {logoData ? (
+                <img
+                  src={logoData}
+                  alt="Logo preview"
+                  style={{ marginTop: 10, maxHeight: 50 }}
+                />
+              ) : null}
             </div>
 
             <div className="toolbar">
               <button className="button buttonPrimary" onClick={handleCopy}>
                 Copy Email
               </button>
-              <button className="button buttonSecondary" onClick={handleDownloadText}>
+
+              <button
+                className="button buttonSecondary"
+                onClick={handleDownloadText}
+              >
                 Download TXT
               </button>
-              <button className="button buttonSecondary" onClick={handleDownloadHtml}>
+
+              <button
+                className="button buttonSecondary"
+                onClick={handleDownloadHtml}
+              >
                 Export HTML
               </button>
-              <button className="button buttonSecondary" onClick={handleSaveAsNew}>
-                Save As New
+
+              <button
+                className="button buttonSecondary"
+                onClick={handleSaveEmail}
+              >
+                Save Email
               </button>
             </div>
 
             {savedMessage ? <p className="notice">{savedMessage}</p> : null}
 
-            <div className="toolbar">
+            <div className="toolbar" style={{ marginTop: 12 }}>
               <button
                 className="button buttonSecondary"
                 onClick={() => router.push("/history")}
               >
-                Back to History
+                Back to Saved Emails
               </button>
             </div>
           </div>
 
           <div className="previewCard">
-            <div className="previewLabel">Live Preview</div>
+            <div className="previewLabel">Preview</div>
 
-            <div className="previewLabel" style={{ marginTop: 10 }}>
-              Subject
+            <div className="previewBox">
+              <strong>Subject: {subject}</strong>
+              <br />
+              <br />
+              {body}
             </div>
-            <div className="previewBox">{subject}</div>
-
-            <div className="previewSpacer" />
-
-            <div className="previewLabel">Body</div>
-            <div className="previewBox">{body}</div>
           </div>
         </div>
       </section>
