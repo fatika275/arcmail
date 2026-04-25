@@ -38,7 +38,7 @@ export default function HomePage() {
 
           <div className="statGrid">
             <div className="statCard">
-              <div className="statValue">{playbooks.length}</div>
+              <div className="statValue">{playbooks.length}+</div>
               <div className="statLabel">Playbooks</div>
             </div>
 
@@ -76,21 +76,21 @@ export default function HomePage() {
       </section>
 
       <section className="container section">
-        <div className="glassCard" style={{ padding: 30 }}>
+        <div className="glassCard featureBand" style={{ padding: 30 }}>
           <div className="badge">The system difference</div>
 
-          <h2 className="pageTitle" style={{ marginTop: 14 }}>
+          <h2 className="pageTitle sectionLeadTitle" style={{ marginTop: 14 }}>
             Better replies come from better structure
           </h2>
 
-          <p className="muted" style={{ maxWidth: 760, lineHeight: 1.75 }}>
+          <p className="muted sectionLeadCopy" style={{ maxWidth: 760, lineHeight: 1.75 }}>
             ArcMail is designed around the full conversation. You do not just
             get copy. You get timing, progression, decision points, and reusable
             messaging systems built to move a lead forward.
           </p>
 
-          <div className="grid" style={{ marginTop: 24 }}>
-            <div className="glassCard" style={{ padding: 20 }}>
+          <div className="grid featureGrid" style={{ marginTop: 24 }}>
+            <div className="glassCard featurePanel" style={{ padding: 20 }}>
               <h3 className="cardTitle">Start with relevance</h3>
               <p className="muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
                 Open with outreach that feels specific to the prospect instead
@@ -98,7 +98,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="glassCard" style={{ padding: 20 }}>
+            <div className="glassCard featurePanel" style={{ padding: 20 }}>
               <h3 className="cardTitle">Follow through properly</h3>
               <p className="muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
                 Know when to follow up, what to send next, and how to avoid
@@ -106,7 +106,7 @@ export default function HomePage() {
               </p>
             </div>
 
-            <div className="glassCard" style={{ padding: 20 }}>
+            <div className="glassCard featurePanel" style={{ padding: 20 }}>
               <h3 className="cardTitle">Reuse what works</h3>
               <p className="muted" style={{ marginTop: 10, lineHeight: 1.7 }}>
                 Save strong emails and sequence versions so your best outreach
@@ -118,8 +118,8 @@ export default function HomePage() {
       </section>
 
       <section className="container section">
-        <div className="grid">
-          <div className="glassCard" style={{ padding: 28 }}>
+        <div className="grid infoGrid">
+          <div className="glassCard infoPanel" style={{ padding: 28 }}>
             <div className="badge">Built for</div>
             <h2 className="pageTitle" style={{ marginTop: 14 }}>
               Teams and founders doing outbound seriously
@@ -133,7 +133,7 @@ export default function HomePage() {
             </ul>
           </div>
 
-          <div className="glassCard" style={{ padding: 28 }}>
+          <div className="glassCard infoPanel" style={{ padding: 28 }}>
             <div className="badge">Positioning</div>
             <h2 className="pageTitle" style={{ marginTop: 14 }}>
               Focused on the messaging layer
@@ -145,7 +145,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="glassCard" style={{ padding: 28 }}>
+          <div className="glassCard infoPanel" style={{ padding: 28 }}>
             <div className="badge">Why it feels different</div>
             <h2 className="pageTitle" style={{ marginTop: 14 }}>
               Practical first, educational when needed
@@ -169,7 +169,7 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid">
+        <div className="grid libraryGrid">
           {playbooks.map((playbook) => (
             <div key={playbook.id} className="playbookCard glassCard">
               <div className="cardTop">
@@ -196,7 +196,7 @@ export default function HomePage() {
       </section>
 
       <section className="container section">
-        <div className="glassCard" style={{ padding: 30, textAlign: "center" }}>
+        <div className="glassCard ctaBand" style={{ padding: 30, textAlign: "center" }}>
           <div className="badge">ArcMail Pro+</div>
 
           <h2 className="pageTitle" style={{ marginTop: 14 }}>

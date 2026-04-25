@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { getEmails, type SavedEmail } from "@/lib/storage";
@@ -16,19 +16,9 @@ export default function SavedEmailViewPage() {
     return Array.isArray(value) ? value[0] : value;
   }, [params]);
 
-  const [email, setEmail] = useState<SavedEmail | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    if (!id) {
-      setIsLoading(false);
-      return;
-    }
-
-    const emails = getEmails();
-    const found = emails.find((item) => item.id === id) ?? null;
-    setEmail(found);
-    setIsLoading(false);
+  const email = useMemo<SavedEmail | null>(() => {
+    if (!id) return null;
+    return getEmails().find((item) => item.id === id) ?? null;
   }, [id]);
 
   async function handleCopy() {
@@ -52,18 +42,6 @@ export default function SavedEmailViewPage() {
     }
 
     router.push(`/editor/${email.playbookId}/${email.templateId}`);
-  }
-
-  if (isLoading) {
-    return (
-      <main className="main">
-        <section className="container">
-          <div className="glassCard emptyState">
-            <h1 className="pageTitle">Loading saved email...</h1>
-          </div>
-        </section>
-      </main>
-    );
   }
 
   if (!email) {

@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getEmails, saveEmail, type SavedEmail } from "@/lib/storage";
 import { downloadHtmlFile } from "@/lib/exportHtml";
+
+function makeId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `email-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 export default function DuplicateEmailPage() {
   const params = useParams();
@@ -14,31 +20,17 @@ export default function DuplicateEmailPage() {
     return Array.isArray(value) ? value[0] : value;
   }, [params]);
 
-  const [email, setEmail] = useState<SavedEmail | null>(null);
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const email = useMemo<SavedEmail | null>(() => {
+    if (!id) return null;
+    return getEmails().find((item) => item.id === id) ?? null;
+  }, [id]);
+  const [subjectDraft, setSubjectDraft] = useState<string | null>(null);
+  const [bodyDraft, setBodyDraft] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [logoData, setLogoData] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
-
-  useEffect(() => {
-    if (!id) return;
-
-    const emails = getEmails();
-    const found = emails.find((item) => item.id === id) ?? null;
-
-    if (found) {
-      setEmail(found);
-      setSubject(found.subject);
-      setBody(found.body);
-    }
-  }, [id]);
-
-  function makeId() {
-    return typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
+  const subject = subjectDraft ?? email?.subject ?? "";
+  const body = bodyDraft ?? email?.body ?? "";
 
   async function handleCopy() {
     try {
@@ -129,7 +121,7 @@ export default function DuplicateEmailPage() {
               <input
                 className="input"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={(e) => setSubjectDraft(e.target.value)}
                 placeholder="Enter subject"
               />
             </div>
@@ -140,7 +132,7 @@ export default function DuplicateEmailPage() {
                 className="input"
                 rows={14}
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={(e) => setBodyDraft(e.target.value)}
                 placeholder="Enter email body"
               />
             </div>

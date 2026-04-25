@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { getCustomTemplates, type CustomTemplate } from "@/lib/storage";
 import { playbooks } from "@/lib/data";
 
@@ -20,12 +20,8 @@ function getBodyPreview(body: string, maxLength = 140) {
 }
 
 export default function ReusableSequencesPage() {
-  const [templates, setTemplates] = useState<CustomTemplate[]>([]);
+  const [templates] = useState<CustomTemplate[]>(() => getCustomTemplates());
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
-
-  useEffect(() => {
-    setTemplates(getCustomTemplates());
-  }, []);
 
   const groupedTemplates = useMemo<GroupedTemplates[]>(() => {
     const groups = new Map<
@@ -65,22 +61,6 @@ export default function ReusableSequencesPage() {
       };
     });
   }, [templates]);
-
-  useEffect(() => {
-    if (groupedTemplates.length === 0) return;
-
-    setOpenGroups((prev) => {
-      const next = { ...prev };
-
-      for (const group of groupedTemplates) {
-        if (!(group.sourcePlaybookId in next)) {
-          next[group.sourcePlaybookId] = true;
-        }
-      }
-
-      return next;
-    });
-  }, [groupedTemplates]);
 
   function toggleGroup(groupId: string) {
     setOpenGroups((prev) => ({
@@ -152,7 +132,10 @@ export default function ReusableSequencesPage() {
         ) : (
           <div style={{ display: "grid", gap: 24 }}>
             {groupedTemplates.map((group) => {
-              const isOpen = openGroups[group.sourcePlaybookId] ?? true;
+              const isOpen =
+                openGroups[group.sourcePlaybookId] === undefined
+                  ? true
+                  : openGroups[group.sourcePlaybookId];
 
               return (
                 <section

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { getEmails, type SavedEmail } from "@/lib/storage";
 import Link from "next/link";
 
@@ -11,11 +11,7 @@ function getBodyPreview(body: string, maxLength = 180) {
 }
 
 export default function SavedEmailsPage() {
-  const [emails, setEmails] = useState<SavedEmail[]>([]);
-
-  useEffect(() => {
-    setEmails(getEmails());
-  }, []);
+  const [emails] = useState<SavedEmail[]>(() => getEmails());
 
   return (
     <main className="main">

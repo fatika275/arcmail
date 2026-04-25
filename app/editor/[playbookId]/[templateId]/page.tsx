@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getTemplate } from "@/lib/data";
 import { renderTemplate } from "@/lib/renderTemplate";
@@ -8,6 +8,12 @@ import { saveCustomTemplate, saveEmail, type SavedEmail } from "@/lib/storage";
 import { downloadHtmlFile } from "@/lib/exportHtml";
 
 const REUSE_EMAIL_KEY = "arcmail_reuse_email";
+
+function makeId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `draft-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
 
 const fieldLabels: Record<string, string> = {
   name: "Who are you emailing?",
@@ -140,41 +146,22 @@ export default function EditorPage() {
   const [offerType, setOfferType] = useState("");
   const [targetAudience, setTargetAudience] = useState("");
   const [primaryGoal, setPrimaryGoal] = useState("");
-  const [reuseMode, setReuseMode] = useState(false);
-  const [editableSubject, setEditableSubject] = useState("");
-  const [editableBody, setEditableBody] = useState("");
   const [showOptionalInputs, setShowOptionalInputs] = useState(false);
   const [showBranding, setShowBranding] = useState(false);
   const [showPersonalGuide, setShowPersonalGuide] = useState(false);
   const [showMoreActions, setShowMoreActions] = useState(false);
-
-  if (!rawPlaybookId || !rawTemplateId) {
-    return (
-      <main className="main">
-        <section className="container">
-          <div className="glassCard emptyState">
-            <h1 className="pageTitle">Template not found</h1>
-            <p className="muted">This playbook step could not be loaded.</p>
-            <div className="toolbar" style={{ justifyContent: "center" }}>
-              <button className="button buttonPrimary" onClick={() => router.push("/")}>
-                Go Home
-              </button>
-            </div>
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-  const playbookId = rawPlaybookId;
-  const templateId = rawTemplateId;
-  const foundTemplate = getTemplate(playbookId, templateId);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
+  const playbookId = rawPlaybookId ?? "";
+  const templateId = rawTemplateId ?? "";
+  const foundTemplate =
+    playbookId && templateId ? getTemplate(playbookId, templateId) : null;
+  const [reuseDraft] = useState<Pick<
+    SavedEmail,
+    "subject" | "body"
+  > | null>(() => {
+    if (typeof window === "undefined") return null;
 
     const raw = localStorage.getItem(REUSE_EMAIL_KEY);
-    if (!raw) return;
+    if (!raw) return null;
 
     try {
       const savedEmail = JSON.parse(raw) as SavedEmail;
@@ -183,15 +170,22 @@ export default function EditorPage() {
         savedEmail.playbookId === playbookId &&
         savedEmail.templateId === templateId
       ) {
-        setReuseMode(true);
-        setEditableSubject(savedEmail.subject);
-        setEditableBody(savedEmail.body);
-        localStorage.removeItem(REUSE_EMAIL_KEY);
+        return {
+          subject: savedEmail.subject,
+          body: savedEmail.body,
+        };
       }
     } catch {
-      localStorage.removeItem(REUSE_EMAIL_KEY);
+      return null;
     }
-  }, [playbookId, templateId]);
+
+    return null;
+  });
+  const [reuseMode, setReuseMode] = useState(Boolean(reuseDraft));
+  const [editableSubject, setEditableSubject] = useState(
+    reuseDraft?.subject ?? ""
+  );
+  const [editableBody, setEditableBody] = useState(reuseDraft?.body ?? "");
 
   if (!foundTemplate) {
     return (
@@ -264,12 +258,6 @@ export default function EditorPage() {
       companyName,
       logoUrl: logoData,
     });
-  }
-
-  function makeId() {
-    return typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   }
 
   function handleSaveEmail() {

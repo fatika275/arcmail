@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   getCustomTemplates,
@@ -11,6 +11,12 @@ import {
 import { downloadHtmlFile } from "@/lib/exportHtml";
 import { playbooks } from "@/lib/data";
 
+function makeId() {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `sequence-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 export default function SequenceAssetPage() {
   const params = useParams();
   const router = useRouter();
@@ -20,33 +26,19 @@ export default function SequenceAssetPage() {
     return Array.isArray(value) ? value[0] : value;
   }, [params]);
 
-  const [template, setTemplate] = useState<CustomTemplate | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [title, setTitle] = useState("");
-  const [subject, setSubject] = useState("");
-  const [body, setBody] = useState("");
+  const template = useMemo<CustomTemplate | null>(() => {
+    if (!id) return null;
+    return getCustomTemplates().find((item) => item.id === id) ?? null;
+  }, [id]);
+  const [titleDraft, setTitleDraft] = useState<string | null>(null);
+  const [subjectDraft, setSubjectDraft] = useState<string | null>(null);
+  const [bodyDraft, setBodyDraft] = useState<string | null>(null);
   const [companyName, setCompanyName] = useState("");
   const [logoData, setLogoData] = useState("");
   const [savedMessage, setSavedMessage] = useState("");
-
-  useEffect(() => {
-    if (!id) {
-      setIsLoading(false);
-      return;
-    }
-
-    const templates = getCustomTemplates();
-    const found = templates.find((item) => item.id === id) ?? null;
-
-    if (found) {
-      setTemplate(found);
-      setTitle(found.title);
-      setSubject(found.subject);
-      setBody(found.body);
-    }
-
-    setIsLoading(false);
-  }, [id]);
+  const title = titleDraft ?? template?.title ?? "";
+  const subject = subjectDraft ?? template?.subject ?? "";
+  const body = bodyDraft ?? template?.body ?? "";
 
   const sourceInfo = useMemo(() => {
     if (!template) {
@@ -69,12 +61,6 @@ export default function SequenceAssetPage() {
       templateLabel: sourceTemplate?.label || "Saved Step",
     };
   }, [template]);
-
-  function makeId() {
-    return typeof crypto !== "undefined" && "randomUUID" in crypto
-      ? crypto.randomUUID()
-      : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
 
   async function handleCopy() {
     try {
@@ -139,18 +125,6 @@ export default function SequenceAssetPage() {
 
     setSavedMessage("Saved to Saved Emails");
     setTimeout(() => setSavedMessage(""), 2000);
-  }
-
-  if (isLoading) {
-    return (
-      <main className="main">
-        <section className="container">
-          <div className="glassCard emptyState">
-            <h1 className="pageTitle">Loading reusable sequence...</h1>
-          </div>
-        </section>
-      </main>
-    );
   }
 
   if (!template) {
@@ -250,7 +224,7 @@ export default function SequenceAssetPage() {
               <input
                 className="input"
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
+                onChange={(e) => setTitleDraft(e.target.value)}
                 placeholder="Enter asset name"
               />
             </div>
@@ -260,7 +234,7 @@ export default function SequenceAssetPage() {
               <input
                 className="input"
                 value={subject}
-                onChange={(e) => setSubject(e.target.value)}
+                onChange={(e) => setSubjectDraft(e.target.value)}
                 placeholder="Enter subject"
               />
             </div>
@@ -271,7 +245,7 @@ export default function SequenceAssetPage() {
                 className="input"
                 rows={14}
                 value={body}
-                onChange={(e) => setBody(e.target.value)}
+                onChange={(e) => setBodyDraft(e.target.value)}
                 placeholder="Enter email body"
               />
             </div>
